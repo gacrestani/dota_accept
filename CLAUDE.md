@@ -19,12 +19,18 @@ architecture and deploy docs.
 
 - Code complete and smoke-tested end-to-end on Linux (status, accept
   round-trip, rate limit, offline handling).
-- Deployment plan: relay on the owner's homeserver, exposed via Cloudflare
-  Tunnel (preferred over router port-forwarding; works behind CGNAT) on a
-  subdomain of a domain they own. Not set up yet.
-- After the relay is live: set GitHub repo variable `RELAY_URL`, push a tag
-  `v*` — `.github/workflows/release.yml` builds the agent exe and attaches it
-  to the release.
+- **Deployed.** Relay runs on the homeserver `tartarus` (Fedora Atomic,
+  x86_64) as a systemd *user* service `dota-relay.service`
+  (`~/.config/systemd/user/`, binary copied to `~/.local/bin/dota-relay`,
+  `PORT=8844` because 8080 is taken by a podman container; lingering is on).
+  Public via Tailscale Funnel: **https://tartarus.taild545f.ts.net** →
+  localhost:8844. Verified from the public internet including a WSS agent
+  round-trip. Update flow: rebuild on laptop (Projects/ is syncthing-synced
+  to tartarus), then `cp ~/Projects/dota_accept/bin/relay
+  ~/.local/bin/dota-relay && systemctl --user restart dota-relay` on tartarus.
+- Production agent exe: `RELAY_URL=wss://tartarus.taild545f.ts.net ./build.sh`.
+- Optional (not done): set GitHub repo variable `RELAY_URL` and push a tag
+  `v*` so `.github/workflows/release.yml` publishes the exe on a release.
 
 ## Untested / known risks
 
