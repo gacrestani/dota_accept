@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dota Remote Accept</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0f1318; color: #e6e2da;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 2rem 1rem 4rem;
+  }
+  header { text-align: center; margin-bottom: 2rem; }
+  h1 { font-size: 1.6rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  h1 span { color: #d43b2a; }
+  header p { color: #8a8577; margin-top: 0.4rem; font-size: 0.95rem; }
+  main { width: 100%; max-width: 520px; }
+  #friends { list-style: none; display: flex; flex-direction: column; gap: 0.8rem; }
+  .card {
+    background: #1a2027; border: 1px solid #2a323c; border-radius: 10px;
+    padding: 1rem 1.1rem; display: flex; align-items: center; gap: 0.9rem;
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: #4a5560; flex: none; }
+  .dot.on { background: #5cbf60; box-shadow: 0 0 8px #5cbf60aa; }
+  .who { flex: 1; min-width: 0; }
+  .who .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who .meta { font-size: 0.78rem; color: #8a8577; font-family: ui-monospace, monospace; margin-top: 2px; }
+  button.accept {
+    background: linear-gradient(#d43b2a, #a92818); color: #fff; border: none;
+    font-weight: 700; font-size: 1rem; letter-spacing: 0.06em;
+    padding: 0.75rem 1.4rem; border-radius: 8px; cursor: pointer; flex: none;
+    transition: filter 0.12s;
+  }
+  button.accept:hover:not(:disabled) { filter: brightness(1.15); }
+  button.accept:disabled { filter: grayscale(0.8) brightness(0.7); cursor: wait; }
+  button.remove {
+    background: none; border: none; color: #4a5560; font-size: 1.1rem;
+    cursor: pointer; flex: none; padding: 0.3rem;
+  }
+  button.remove:hover { color: #d43b2a; }
+  #add {
+    margin-top: 1.6rem; display: flex; gap: 0.6rem;
+    background: #151a20; border: 1px dashed #2a323c; border-radius: 10px; padding: 0.9rem;
+  }
+  #add input {
+    background: #0f1318; border: 1px solid #2a323c; border-radius: 6px;
+    color: #e6e2da; padding: 0.6rem 0.7rem; font-size: 0.95rem; min-width: 0;
+  }
+  #add input:focus { outline: none; border-color: #d43b2a; }
+  #name { flex: 3; }
+  #code { flex: 2; text-transform: uppercase; font-family: ui-monospace, monospace; }
+  #add button {
+    background: #2a323c; color: #e6e2da; border: none; border-radius: 6px;
+    padding: 0 1.1rem; font-weight: 600; cursor: pointer; flex: none;
+  }
+  #add button:hover { background: #39434f; }
+  .empty { text-align: center; color: #8a8577; padding: 2rem 0; font-size: 0.95rem; }
+  #toast {
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    background: #1a2027; border: 1px solid #2a323c; border-left: 4px solid #5cbf60;
+    border-radius: 8px; padding: 0.8rem 1.2rem; font-size: 0.95rem;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s; max-width: 90vw;
+  }
+  #toast.err { border-left-color: #d43b2a; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Dota <span>Remote Accept</span></h1>
+  <p>Press ACCEPT for a friend when their match pops.</p>
+</header>
+<main>
+  <ul id="friends"></ul>
+  <form id="add">
+    <input id="name" placeholder="Friend's name" maxlength="20" autocomplete="off">
+    <input id="code" placeholder="CODE" maxlength="12" autocomplete="off" autocapitalize="characters">
+    <button type="submit">Add</button>
+  </form>
+</main>
+<div id="toast" role="status"></div>
+<script>
+  const KEY = 'dota-accept-friends';
+  const CODE_RE = /^[A-Z0-9]{4,12}$/;
+  let friends = [];
+  try { friends = JSON.parse(localStorage.getItem(KEY)) || []; } catch {}
+
+  // ?code=XXX&name=YYY pre-adds a friend, so each person can share a
+  // bookmarkable link like https://host/?code=X7K2M9&name=Bob
+  const params = new URLSearchParams(location.search);
+  if (params.get('code')) {
+    const code = params.get('code').toUpperCase().trim();
+    if (CODE_RE.test(code) && !friends.some(f => f.code === code)) {
+      friends.push({ name: (params.get('name') || code).slice(0, 20), code });
+      save();
+    }
+    history.replaceState(null, '', location.pathname);
+  }
+
+  function save() { localStorage.setItem(KEY, JSON.stringify(friends)); }
+
+  const list = document.getElementById('friends');
+
+  function render() {
+    list.innerHTML = '';
+    if (!friends.length) {
+      list.innerHTML = '<li class="empty">No friends yet — add a code below.<br>' +
+        'Codes are shown by the agent app running on their PC.</li>';
+      return;
+    }
+    for (const f of friends) {
+      const li = document.createElement('li');
+      li.className = 'card';
+      li.dataset.code = f.code;
+
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+
+      const who = document.createElement('div');
+      who.className = 'who';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = f.name;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = f.code + ' · checking...';
+      who.append(name, meta);
+
+      const btn = document.createElement('button');
+      btn.className = 'accept';
+      btn.textContent = 'ACCEPT';
+      btn.addEventListener('click', () => accept(f.code, btn));
+
+      const rm = document.createElement('button');
+      rm.className = 'remove';
+      rm.title = 'Remove';
+      rm.textContent = '×';
+      rm.addEventListener('click', () => {
+        friends = friends.filter(x => x.code !== f.code);
+        save();
+        render();
+        poll();
+      });
+
+      li.append(dot, who, btn, rm);
+      list.appendChild(li);
+    }
+  }
+
+  let status = {};
+  async function poll() {
+    if (!friends.length) return;
+    try {
+      const res = await fetch('api/status?codes=' + friends.map(f => f.code).join(','));
+      status = await res.json();
+    } catch { status = {}; }
+    for (const li of list.querySelectorAll('.card')) {
+      const online = !!status[li.dataset.code];
+      li.querySelector('.dot').classList.toggle('on', online);
+      li.querySelector('.meta').textContent =
+        li.dataset.code + (online ? ' · online' : ' · offline');
+    }
+  }
+
+  async function accept(code, btn) {
+    btn.disabled = true;
+    btn.textContent = '. . .';
+    try {
+      const res = await fetch('api/accept/' + code, { method: 'POST' });
+      const j = await res.json();
+      toast((j.ok ? '✓ ' : '✗ ') + j.detail, j.ok);
+    } catch {
+      toast('✗ relay unreachable', false);
+    }
+    btn.disabled = false;
+    btn.textContent = 'ACCEPT';
+  }
+
+  let toastTimer;
+  function toast(msg, ok) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = ok ? 'show' : 'show err';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = t.className.replace('show', ''); }, 3500);
+  }
+
+  document.getElementById('add').addEventListener('submit', e => {
+    e.preventDefault();
+    const name = document.getElementById('name').value.trim();
+    const code = document.getElementById('code').value.toUpperCase().trim();
+    if (!CODE_RE.test(code)) { toast('✗ codes are 4-12 letters/digits', false); return; }
+    if (friends.some(f => f.code === code)) { toast('✗ that code is already added', false); return; }
+    friends.push({ name: name || code, code });
+    save();
+    e.target.reset();
+    render();
+    poll();
+  });
+
+  render();
+  poll();
+  setInterval(poll, 4000);
+</script>
+</body>
+</html>

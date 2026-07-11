@@ -1,0 +1,29 @@
+# Builds the Windows agent and attaches it to a GitHub release whenever you
+# push a tag like v1.0.0. Set a repository variable named RELAY_URL
+# (Settings -> Secrets and variables -> Actions -> Variables) to your relay's
+# public wss:// URL so the exe ships pointed at your server.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+      - name: Build Windows agent
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build \
+            -ldflags "-s -w -X main.defaultRelay=${{ vars.RELAY_URL }}" \
+            -o dota-accept-agent.exe ./cmd/agent
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dota-accept-agent.exe
